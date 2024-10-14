@@ -1,7 +1,9 @@
 use std::fmt::{Display, Formatter};
+use async_trait::async_trait;
 
 /// Trait that refreshes a token when it is expired
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait TokenCache: Sync {
     /// Returns the token that is currently held within the instance of `TokenCache`, together with
     /// the expiry of that token as a u64 in seconds sine the Unix Epoch (1 Jan 1970).
@@ -84,7 +86,8 @@ impl Token {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl TokenCache for Token {
     async fn scope(&self) -> String {
         self.access_scope.clone()
@@ -110,10 +113,12 @@ impl TokenCache for Token {
             exp,
             iat: now,
         };
+
         let header = jsonwebtoken::Header {
             alg: jsonwebtoken::Algorithm::RS256,
             ..Default::default()
         };
+
         let private_key_bytes = crate::SERVICE_ACCOUNT.private_key.as_bytes();
         let private_key = jsonwebtoken::EncodingKey::from_rsa_pem(private_key_bytes)?;
         let jwt = jsonwebtoken::encode(&header, &claims, &private_key)?;
@@ -121,6 +126,7 @@ impl TokenCache for Token {
             ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
             ("assertion", &jwt),
         ];
+
         let response: TokenResponse = client
             .post("https://www.googleapis.com/oauth2/v4/token")
             .form(&body)

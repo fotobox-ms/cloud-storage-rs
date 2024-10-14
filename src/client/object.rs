@@ -84,6 +84,7 @@ impl<'a> ObjectClient<'a> {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn create_streamed<S>(
         &self,
         bucket: &str,
