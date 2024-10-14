@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use async_trait::async_trait;
 
 /// Trait that refreshes a token when it is expired
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_family = "wasm", async_trait(?Send))]
+#[cfg_attr(not(target_family = "wasm"), async_trait)]
 pub trait TokenCache: Sync {
     /// Returns the token that is currently held within the instance of `TokenCache`, together with
     /// the expiry of that token as a u64 in seconds sine the Unix Epoch (1 Jan 1970).
@@ -86,8 +86,8 @@ impl Token {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_family = "wasm", async_trait(?Send))]
+#[cfg_attr(not(target_family = "wasm"), async_trait)]
 impl TokenCache for Token {
     async fn scope(&self) -> String {
         self.access_scope.clone()
