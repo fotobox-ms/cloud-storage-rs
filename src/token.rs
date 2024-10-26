@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use async_trait::async_trait;
+use crate::service_account::ServiceAccount;
 
 /// Trait that refreshes a token when it is expired
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
@@ -34,6 +35,9 @@ pub trait TokenCache: Sync {
 
     /// Fetches and returns the token using the service account
     async fn fetch_token(&self, client: &reqwest::Client) -> crate::Result<(String, u64)>;
+
+    /// Get the associated [ServiceAccount]
+    fn service_account(&self) -> ServiceAccount;
 }
 
 #[derive(serde::Serialize)]
@@ -60,6 +64,7 @@ pub struct Token {
     token: tokio::sync::RwLock<Option<DefaultTokenData>>,
     // store the access scope for later use if we need to refresh the token
     access_scope: String,
+    service_account: ServiceAccount,
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +87,21 @@ impl Token {
         Self {
             token: tokio::sync::RwLock::new(None),
             access_scope: scope.to_string(),
+            service_account: ServiceAccount::get()
+        }
+    }
+
+    /// Creates a token from an already parsed service account file, with the default scope
+    pub fn from_service_account(service_account: ServiceAccount) -> Self {
+        Self::from_service_account_with_scope(service_account, "https://www.googleapis.com/auth/devstorage.full_control")
+    }
+
+    /// Creates a token from an already parsed service account file and a custom scope
+    pub fn from_service_account_with_scope(service_account: ServiceAccount, scope: &str) -> Self {
+        Self {
+            token: tokio::sync::RwLock::new(None),
+            access_scope: scope.to_string(),
+            service_account: service_account,
         }
     }
 }
@@ -89,10 +109,6 @@ impl Token {
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 impl TokenCache for Token {
-    async fn scope(&self) -> String {
-        self.access_scope.clone()
-    }
-
     async fn token_and_exp(&self) -> Option<(String, u64)> {
         self.token.read().await.as_ref().map(|d| (d.0.clone(), d.1))
     }
@@ -102,12 +118,16 @@ impl TokenCache for Token {
         Ok(())
     }
 
+    async fn scope(&self) -> String {
+        self.access_scope.clone()
+    }
+
     async fn fetch_token(&self, client: &reqwest::Client) -> crate::Result<(String, u64)> {
         let now = now();
         let exp = now + 3600;
 
         let claims = Claims {
-            iss: crate::SERVICE_ACCOUNT.client_email.clone(),
+            iss: self.service_account.client_email.clone(),
             scope: self.scope().await,
             aud: "https://www.googleapis.com/oauth2/v4/token".to_string(),
             exp,
@@ -119,7 +139,7 @@ impl TokenCache for Token {
             ..Default::default()
         };
 
-        let private_key_bytes = crate::SERVICE_ACCOUNT.private_key.as_bytes();
+        let private_key_bytes = self.service_account.private_key.as_bytes();
         let private_key = jsonwebtoken::EncodingKey::from_rsa_pem(private_key_bytes)?;
         let jwt = jsonwebtoken::encode(&header, &claims, &private_key)?;
         let body = [
@@ -136,11 +156,15 @@ impl TokenCache for Token {
             .await?;
         Ok((response.access_token, now + response.expires_in))
     }
+
+    fn service_account(&self) -> ServiceAccount {
+        self.service_account.clone()
+    }
 }
 
 fn now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs()
 }

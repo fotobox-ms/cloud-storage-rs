@@ -36,7 +36,7 @@ impl<'a> BucketClient<'a> {
     /// ```
     pub async fn create(&self, new_bucket: &NewBucket) -> crate::Result<Bucket> {
         let url = format!("{}/b/", crate::BASE_URL);
-        let project = &crate::SERVICE_ACCOUNT.project_id;
+        let project = self.0.token_cache.service_account().project_id;
         let query = [("project", project)];
         let result: GoogleResponse<Bucket> = self
             .0
@@ -74,7 +74,7 @@ impl<'a> BucketClient<'a> {
     /// ```
     pub async fn list(&self) -> crate::Result<Vec<Bucket>> {
         let url = format!("{}/b/", crate::BASE_URL);
-        let project = &crate::SERVICE_ACCOUNT.project_id;
+        let project = self.0.token_cache.service_account().project_id;
         let query = [("project", project)];
         let result: GoogleResponse<ListResponse<Bucket>> = self
             .0

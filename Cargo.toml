@@ -53,6 +53,8 @@ ring = { version = "0.17.8", features = ["wasm32_unknown_unknown_js"], default-f
 
 pem = { version = "3.0.4", default-features = false, optional = true }
 
+web-time = "1.1.0"
+
 [dev-dependencies]
 tokio = { version = "1.0", default-features = false, features = ["full"] }
 

@@ -5,6 +5,7 @@ use futures_util::Stream;
 use futures_util::TryStream;
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use std::collections::HashMap;
+use crate::service_account::ServiceAccount;
 
 /// A resource representing a file in Google Cloud Storage.
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -93,6 +94,8 @@ pub struct Object {
     pub customer_encryption: Option<CustomerEncrypton>,
     /// Cloud KMS Key used to encrypt this object, if the object is encrypted by such a key.
     pub kms_key_name: Option<String>,
+    /// Service Account used to access this Object
+    pub service_account: ServiceAccount,
 }
 
 /// Contains data about how a user might encrypt their files in Google Cloud Storage.
@@ -785,6 +788,7 @@ impl Object {
         let issue_date = chrono::Utc::now();
         let file_path = self.path_to_resource(file_path);
         let query_string = Self::get_canonical_query_string(
+            self.service_account.client_email.as_str(),
             &issue_date,
             duration,
             &signed_headers,
@@ -814,7 +818,7 @@ impl Object {
         );
 
         // 4 sign the string to sign with RSA - SHA256
-        let signature = hex::encode(crypto::rsa_pkcs1_sha256(&string_to_sign)?);
+        let signature = hex::encode(crypto::rsa_pkcs1_sha256(self.service_account.private_key.as_str(), &string_to_sign)?);
 
         // 5 construct the signed url
         Ok(format!(
@@ -855,6 +859,7 @@ impl Object {
 
     #[inline(always)]
     fn get_canonical_query_string(
+        email: &str,
         date: &chrono::DateTime<chrono::Utc>,
         exp: u32,
         headers: &str,
@@ -862,7 +867,7 @@ impl Object {
     ) -> String {
         let credential = format!(
             "{authorizer}/{scope}",
-            authorizer = crate::SERVICE_ACCOUNT.client_email,
+            authorizer = email,
             scope = Self::get_credential_scope(date),
         );
         let mut s = format!(
@@ -903,10 +908,10 @@ impl Object {
 #[cfg(feature = "openssl")]
 mod openssl {
     #[inline(always)]
-    pub fn rsa_pkcs1_sha256(message: &str) -> crate::Result<Vec<u8>> {
+    pub fn rsa_pkcs1_sha256(private_key: &str, message: &str) -> crate::Result<Vec<u8>> {
         use openssl::{hash::MessageDigest, pkey::PKey, sign::Signer};
 
-        let key = PKey::private_key_from_pem(crate::SERVICE_ACCOUNT.private_key.as_bytes())?;
+        let key = PKey::private_key_from_pem(private_key.as_bytes())?;
         let mut signer = Signer::new(MessageDigest::sha256(), &key)?;
         signer.update(message.as_bytes())?;
         Ok(signer.sign_to_vec()?)
@@ -922,13 +927,13 @@ mod openssl {
 mod ring {
     #[cfg_attr(all(feature = "ring", feature = "openssl"), allow(dead_code))]
     #[inline(always)]
-    pub fn rsa_pkcs1_sha256(message: &str) -> crate::Result<Vec<u8>> {
+    pub fn rsa_pkcs1_sha256(private_key: &str, message: &str) -> crate::Result<Vec<u8>> {
         use ring::{
             rand::SystemRandom,
             signature::{RsaKeyPair, RSA_PKCS1_SHA256},
         };
 
-        let key_pem = pem::parse(crate::SERVICE_ACCOUNT.private_key.as_bytes())?;
+        let key_pem = pem::parse(private_key.as_bytes())?;
         let key = RsaKeyPair::from_pkcs8(&key_pem.contents())?;
         let rng = SystemRandom::new();
         let mut signature = vec![0; key.public().modulus_len()];
@@ -1285,14 +1290,16 @@ mod tests {
     #[cfg(all(feature = "openssl", feature = "ring"))]
     #[test]
     fn check_matching_crypto() {
+        let sa = ServiceAccount::get();
+
         assert_eq!(
             openssl::sha256(b"hello").as_ref(),
             ring::sha256(b"hello").as_ref()
         );
 
         assert_eq!(
-            openssl::rsa_pkcs1_sha256("world").unwrap(),
-            ring::rsa_pkcs1_sha256("world").unwrap(),
+            openssl::rsa_pkcs1_sha256(sa.private_key.as_str(), "world").unwrap(),
+            ring::rsa_pkcs1_sha256(sa.private_key.as_str(), "world").unwrap(),
         );
     }
 

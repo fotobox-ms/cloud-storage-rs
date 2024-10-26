@@ -3,6 +3,7 @@ use crate::resources::{
     default_object_access_control::{DefaultObjectAccessControl, NewDefaultObjectAccessControl},
 };
 pub use crate::resources::{common::Entity, location::*};
+use crate::service_account::ServiceAccount;
 
 /// The Buckets resource represents a
 /// [bucket](https://cloud.google.com/storage/docs/key-terms#buckets) in Google Cloud Storage. There

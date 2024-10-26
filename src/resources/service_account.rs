@@ -1,5 +1,5 @@
 /// A deserialized `service-account-********.json`-file.
-#[derive(serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub struct ServiceAccount {
     /// The type of authentication, this should always be `service_account`.
     #[serde(rename = "type")]

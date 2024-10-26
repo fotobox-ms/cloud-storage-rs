@@ -116,11 +116,6 @@ lazy_static::lazy_static! {
     static ref IAM_TOKEN_CACHE: Mutex<Token> = Mutex::new(Token::new(
         "https://www.googleapis.com/auth/iam"
     ));
-
-    /// The struct is the parsed service account json file. It is publicly exported to enable easier
-    /// debugging of which service account is currently used. It is of the type
-    /// [ServiceAccount](service_account/struct.ServiceAccount.html).
-    pub static ref SERVICE_ACCOUNT: ServiceAccount = ServiceAccount::get();
 }
 
 #[cfg(feature = "global-client")]
